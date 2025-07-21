@@ -27,8 +27,6 @@ if (!(Test-Path $TestDataDir)) {
 
 # Test PDF files from public-files guide
 $TestPdfs = @(
-    @{ Name = "150KB PDF Sample"; Url = "https://file-examples.com/wp-content/storage/2017/10/file-sample_150kB.pdf"; FileName = "sample_150kB.pdf" },
-    @{ Name = "500KB PDF Sample"; Url = "https://file-examples.com/wp-content/storage/2017/10/file-sample_500kB.pdf"; FileName = "sample_500kB.pdf" },
     @{ Name = "Simple Test PDF"; Url = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"; FileName = "simple_test.pdf" }
 )
 

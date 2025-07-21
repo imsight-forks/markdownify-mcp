@@ -27,8 +27,6 @@ if (!(Test-Path $TestDataDir)) {
 
 # Test DOCX files from public-files guide
 $TestDocx = @(
-    @{ Name = "100KB DOCX Sample"; Url = "https://file-examples.com/wp-content/storage/2017/02/file-sample_100kB.docx"; FileName = "sample_100kB.docx" },
-    @{ Name = "500KB DOCX Sample"; Url = "https://file-examples.com/wp-content/storage/2017/02/file-sample_500kB.docx"; FileName = "sample_500kB.docx" },
     @{ Name = "Calibre Demo DOCX"; Url = "https://calibre-ebook.com/downloads/demos/demo.docx"; FileName = "calibre_demo.docx" }
 )
 

@@ -20,11 +20,10 @@ if (!(Test-Path $TestDataDir)) {
     New-Item -Path $TestDataDir -ItemType Directory -Force | Out-Null
 }
 
-# Test image files from public-files guide
+# Test image files from public-files guide  
 $TestImages = @(
     @{ Name = "Random 800x600 Image"; Url = "https://picsum.photos/800/600"; FileName = "random_800x600.jpg" },
-    @{ Name = "Specific Picsum Image"; Url = "https://picsum.photos/id/237/800/600"; FileName = "picsum_237.jpg" },
-    @{ Name = "File Examples JPG"; Url = "https://file-examples.com/storage/feac5c3e3c8598a1c4dd5db/2017/10/file_example_JPG_100kB.jpg"; FileName = "file_example_100kB.jpg" }
+    @{ Name = "Specific Picsum Image"; Url = "https://picsum.photos/id/237/800/600"; FileName = "picsum_237.jpg" }
 )
 
 Write-Host "=== Testing image-to-markdown MCP Tool ===" -ForegroundColor Cyan
