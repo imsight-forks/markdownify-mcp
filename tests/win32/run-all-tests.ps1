@@ -15,6 +15,10 @@ if ($Output) {
     $OutputDir = $Output
 }
 
+# Calculate project path from script location (works regardless of execution context)
+$ScriptDir = Split-Path $MyInvocation.MyCommand.Path
+$ProjectPath = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+
 # Ensure output directory exists
 if (!(Test-Path $OutputDir)) {
     New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
@@ -244,7 +248,7 @@ if ($TotalFailed -eq 0) {
 
 Write-Host ""
 Write-Host "Output files saved to: $OutputDir" -ForegroundColor Gray
-Write-Host "Test data files in: $((Split-Path -Parent (Split-Path -Parent (Get-Location))))\tmp\test-data" -ForegroundColor Gray
+Write-Host "Test data files in: $ProjectPath\tmp\test-data" -ForegroundColor Gray
 
 # Exit with appropriate code
 if ($TotalFailed -eq 0) {

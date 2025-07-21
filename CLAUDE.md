@@ -3,3 +3,6 @@
 
 ## Package Management
 - Use `pnpm` to manage npm packages in this project
+
+## Git Workflow
+- When git push, push to my fork

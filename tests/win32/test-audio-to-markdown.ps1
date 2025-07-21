@@ -36,7 +36,9 @@ Write-Host ""
 
 $SuccessCount = 0
 $FailCount = 0
-$ProjectPath = Split-Path -Parent (Split-Path -Parent (Get-Location))
+# Calculate project path from script location (works regardless of execution context)
+$ScriptDir = Split-Path $MyInvocation.MyCommand.Path
+$ProjectPath = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 
 foreach ($testCase in $TestAudio) {
     Write-Host "Testing: $($testCase.Name)" -ForegroundColor Yellow
