@@ -4,8 +4,11 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { fileURLToPath } from "url";
+import envPaths from "env-paths";
+import upath from "upath";
 
 const execAsync = promisify(exec);
+const paths = envPaths('markdownify-mcp');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,8 +24,8 @@ export class Markdownify {
     projectRoot: string,
     uvPath: string,
   ): Promise<string> {
-    const venvPath = path.join(projectRoot, ".venv");
-    const markitdownPath = path.join(
+    const venvPath = upath.join(projectRoot, ".venv");
+    const markitdownPath = upath.join(
       venvPath, 
       process.platform === 'win32' ? 'Scripts' : 'bin', 
       `markitdown${process.platform === 'win32' ? '.exe' : ''}`
@@ -32,9 +35,20 @@ export class Markdownify {
       throw new Error("markitdown executable not found");
     }
 
-    const { stdout, stderr } = await execAsync(
-      `${uvPath} run ${markitdownPath} "${filePath}"`,
-    );
+    // Expand home directory and normalize paths using upath for consistency
+    const expandedUvPath = this.expandHome(uvPath);
+    const normalizedUvPath = upath.normalize(expandedUvPath);
+    const normalizedMarkitdownPath = upath.normalize(markitdownPath);
+    const normalizedFilePath = upath.normalize(filePath);
+    
+    // Properly quote paths for Windows (upath handles path separators consistently)
+    const quotedUvPath = normalizedUvPath.includes(' ') ? `"${normalizedUvPath}"` : normalizedUvPath;
+    const quotedMarkitdownPath = normalizedMarkitdownPath.includes(' ') ? `"${normalizedMarkitdownPath}"` : normalizedMarkitdownPath;
+    const quotedFilePath = normalizedFilePath.includes(' ') ? `"${normalizedFilePath}"` : normalizedFilePath;
+    
+    const command = `${quotedUvPath} run ${quotedMarkitdownPath} ${quotedFilePath}`;
+    
+    const { stdout, stderr } = await execAsync(command);
 
     if (stderr) {
       throw new Error(`Error executing command: ${stderr}`);
@@ -49,7 +63,7 @@ export class Markdownify {
       outputExtension = suggestedExtension;
     }
 
-    const tempOutputPath = path.join(
+    const tempOutputPath = upath.join(
       os.tmpdir(),
       `markdown_output_${Date.now()}.${outputExtension}`,
     );
@@ -58,21 +72,63 @@ export class Markdownify {
   }
 
   private static normalizePath(p: string): string {
-    return path.normalize(p);
+    return upath.normalize(p);
   }
   
   private static expandHome(filepath: string): string {
     if (filepath.startsWith('~/') || filepath === '~') {
-      return path.join(os.homedir(), filepath.slice(1));
+      return upath.join(os.homedir(), filepath.slice(1));
     }
-    return filepath;
+    // Handle Windows-style home expansion using upath for consistency
+    if (process.platform === 'win32' && filepath.startsWith('~\\')) {
+      return upath.join(os.homedir(), filepath.slice(2));
+    }
+    return upath.normalize(filepath);
+  }
+
+  private static getDefaultUvPath(): string {
+    const homeDir = os.homedir();
+    const uvExecutable = process.platform === 'win32' ? 'uv.exe' : 'uv';
+    
+    // Try multiple standard locations using env-paths for platform-specific directories
+    const possiblePaths = [
+      path.join(homeDir, '.local', 'bin', uvExecutable),
+      path.join(paths.data, 'bin', uvExecutable), // Application data directory
+    ];
+    
+    if (process.platform === 'win32') {
+      possiblePaths.push(
+        path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Python', 'Scripts', uvExecutable),
+        path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'Programs', 'Python', 'Scripts', uvExecutable)
+      );
+    } else {
+      possiblePaths.push(
+        upath.join('/usr/local/bin', uvExecutable),
+        upath.join('/usr/bin', uvExecutable)
+      );
+    }
+    
+    // Check if any of these paths exist and return the first one found
+    for (const possiblePath of possiblePaths) {
+      try {
+        const normalizedPath = upath.normalize(possiblePath);
+        if (fs.existsSync(normalizedPath)) {
+          return normalizedPath;
+        }
+      } catch {
+        // Continue checking other paths
+      }
+    }
+    
+    // If none found, return the first standard location (user's .local/bin)
+    return upath.normalize(possiblePaths[0]);
   }
 
   static async toMarkdown({
     filePath,
     url,
-    projectRoot = path.resolve(__dirname, ".."),
-    uvPath = "~/.local/bin/uv",
+    projectRoot = upath.resolve(__dirname, ".."),
+    uvPath = Markdownify.getDefaultUvPath(),
   }: {
     filePath?: string;
     url?: string;
@@ -126,14 +182,14 @@ export class Markdownify {
     filePath: string;
   }): Promise<MarkdownResult> {
     // Check file type is *.md or *.markdown
-    const normPath = this.normalizePath(path.resolve(this.expandHome(filePath)));
+    const normPath = this.normalizePath(upath.resolve(this.expandHome(filePath)));
     const markdownExt = [".md", ".markdown"];
-    if (!markdownExt.includes(path.extname(normPath))){
+    if (!markdownExt.includes(upath.extname(normPath))){
       throw new Error("Required file is not a Markdown file.");
     }
 
     if (process.env?.MD_SHARE_DIR) {
-      const allowedShareDir = this.normalizePath(path.resolve(this.expandHome(process.env.MD_SHARE_DIR)));
+      const allowedShareDir = this.normalizePath(upath.resolve(this.expandHome(process.env.MD_SHARE_DIR)));
       if (!normPath.startsWith(allowedShareDir)) {
         throw new Error(`Only files in ${allowedShareDir} are allowed.`);
       }
