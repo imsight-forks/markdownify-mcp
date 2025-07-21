@@ -13,12 +13,104 @@ const paths = envPaths('markdownify-mcp');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Constants for download limits and timeouts
+const WARNING_FILE_SIZE = 50 * 1024 * 1024; // 50MB - warn but don't block
+const DOWNLOAD_TIMEOUT = 30000; // 30 second timeout
+
 export type MarkdownResult = {
   path: string;
   text: string;
 };
 
 export class Markdownify {
+  private static isUrl(input: string): boolean {
+    try {
+      new URL(input);
+      return input.startsWith('http://') || input.startsWith('https://');
+    } catch {
+      return false;
+    }
+  }
+
+  private static getFileExtensionFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      const extension = path.extname(pathname).toLowerCase().slice(1);
+      
+      // Return recognized extensions, default to null for unknown
+      if (['pdf', 'docx', 'xlsx', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'mp3', 'wav', 'mp4'].includes(extension)) {
+        return extension;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static async downloadToTempFile(url: string): Promise<string> {
+    // Validate URL
+    if (!this.isUrl(url)) {
+      throw new Error("Invalid URL provided");
+    }
+
+    const parsedUrl = new URL(url);
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      throw new Error("Only HTTP and HTTPS protocols are allowed");
+    }
+
+    // Create secure temporary directory
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(await fs.promises.realpath(os.tmpdir()), 'markdownify-')
+    );
+
+    try {
+      // Determine file extension from URL
+      const extension = this.getFileExtensionFromUrl(url) || 'bin';
+      const tempFilePath = path.join(tempDir, `download.${extension}`);
+
+      // Download with timeout and size limit
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
+
+      try {
+        const response = await fetch(url, { 
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // Check content length if provided - warn for large files
+        const contentLength = response.headers.get('content-length');
+        if (contentLength && parseInt(contentLength) > WARNING_FILE_SIZE) {
+          console.warn(`Warning: Large file detected: ${Math.round(parseInt(contentLength) / 1024 / 1024)}MB. This may take longer to process.`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Warn for actual size if large
+        if (arrayBuffer.byteLength > WARNING_FILE_SIZE) {
+          console.warn(`Warning: Large file processed: ${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB.`);
+        }
+
+        await fs.promises.writeFile(tempFilePath, Buffer.from(arrayBuffer));
+        return tempFilePath;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        // Clean up temp directory on download failure
+        await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      // Clean up temp directory on any failure
+      await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
   private static async _markitdown(
     filePath: string,
     projectRoot: string,
@@ -28,7 +120,8 @@ export class Markdownify {
     const expandedUvPath = this.expandHome(uvPath);
     const normalizedUvPath = upath.normalize(expandedUvPath);
     const normalizedProjectRoot = upath.normalize(projectRoot);
-    const normalizedFilePath = upath.normalize(filePath);
+    // Don't normalize URLs - only normalize actual file paths
+    const normalizedFilePath = this.isUrl(filePath) ? filePath : upath.normalize(filePath);
     
     // Properly quote paths for Windows (upath handles path separators consistently)
     const quotedUvPath = normalizedUvPath.includes(' ') ? `"${normalizedUvPath}"` : normalizedUvPath;
@@ -135,6 +228,7 @@ export class Markdownify {
     try {
       let inputPath: string;
       let isTemporary = false;
+      let tempDirToCleanup: string | null = null;
 
       if (url) {
         const response = await fetch(url);
@@ -143,6 +237,9 @@ export class Markdownify {
 
         if (url.endsWith(".pdf")) {
           extension = "pdf";
+        } else {
+          // Default to html for webpages so markitdown can process them
+          extension = "html";
         }
 
         const arrayBuffer = await response.arrayBuffer();
@@ -151,7 +248,15 @@ export class Markdownify {
         inputPath = await this.saveToTempFile(content, extension);
         isTemporary = true;
       } else if (filePath) {
-        inputPath = filePath;
+        // Check if filePath is actually a URL
+        if (this.isUrl(filePath)) {
+          inputPath = await this.downloadToTempFile(filePath);
+          isTemporary = true;
+          // Store temp directory path for cleanup (downloadToTempFile creates a directory)
+          tempDirToCleanup = path.dirname(inputPath);
+        } else {
+          inputPath = filePath;
+        }
       } else {
         throw new Error("Either filePath or url must be provided");
       }
@@ -159,8 +264,20 @@ export class Markdownify {
       const text = await this._markitdown(inputPath, projectRoot, uvPath);
       const outputPath = await this.saveToTempFile(text);
 
+      // Clean up temporary files/directories
       if (isTemporary) {
-        fs.unlinkSync(inputPath);
+        try {
+          if (tempDirToCleanup) {
+            // Clean up entire temp directory (for downloaded files)
+            await fs.promises.rm(tempDirToCleanup, { recursive: true, force: true });
+          } else {
+            // Clean up single temp file (for old method)
+            fs.unlinkSync(inputPath);
+          }
+        } catch (cleanupError) {
+          // Log cleanup error but don't fail the operation
+          console.warn('Failed to cleanup temporary files:', cleanupError);
+        }
       }
 
       return { path: outputPath, text };

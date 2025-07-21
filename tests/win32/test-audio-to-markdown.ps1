@@ -20,10 +20,17 @@ if (!(Test-Path $TestDataDir)) {
     New-Item -Path $TestDataDir -ItemType Directory -Force | Out-Null
 }
 
-# Test audio files from public-files guide
+# Test audio files from Wikipedia/Wikimedia Commons (public-files guide)
+# Note: Using Wikimedia sources due to file-examples.com having 403 Forbidden issues
 $TestAudio = @(
-    @{ Name = "1MB WAV Sample"; Url = "https://file-examples.com/wp-content/storage/2017/11/file_example_WAV_1MG.wav"; FileName = "sample_1MB.wav" },
-    @{ Name = "2MB WAV Sample"; Url = "https://file-examples.com/wp-content/storage/2017/11/file_example_WAV_2MG.wav"; FileName = "sample_2MB.wav" }
+    @{ Name = "Classical Music WAV"; Url = "https://upload.wikimedia.org/wikipedia/commons/f/f0/Andal%C5%ABzijas_romance3470.wav"; FileName = "classical_music.wav" },
+    @{ Name = "Spoken Audio Wikipedia"; Url = "https://upload.wikimedia.org/wikipedia/commons/2/25/%27Absent-minded_professor%27_from_Wikipedia.ogg"; FileName = "spoken_wikipedia.ogg" }
+)
+
+# Remote URL tests (new feature) - test direct audio URL processing
+$RemoteAudioTests = @(
+    @{ Name = "Remote Classical Audio"; Url = "https://upload.wikimedia.org/wikipedia/commons/f/f0/Andal%C5%ABzijas_romance3470.wav" },
+    @{ Name = "Remote Spoken Audio"; Url = "https://upload.wikimedia.org/wikipedia/commons/2/25/%27Absent-minded_professor%27_from_Wikipedia.ogg" }
 )
 
 Write-Host "=== Testing audio-to-markdown MCP Tool ===" -ForegroundColor Cyan
@@ -123,6 +130,73 @@ foreach ($testCase in $TestAudio) {
     }
     catch {
         Write-Host "[FAIL] Exception occurred" -ForegroundColor Red
+        Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
+        $FailCount++
+    }
+    
+    Write-Host ""
+}
+
+# Test remote URLs directly (NEW FEATURE)
+Write-Host "=== Testing Remote Audio URLs (New Feature) ===" -ForegroundColor Cyan
+Write-Host "Testing direct URL processing without local file download" -ForegroundColor Gray
+Write-Host "Note: Audio transcription from remote URLs may take longer" -ForegroundColor Yellow
+Write-Host ""
+
+foreach ($remoteTest in $RemoteAudioTests) {
+    Write-Host "Testing Remote Audio URL: $($remoteTest.Name)" -ForegroundColor Yellow
+    Write-Host "URL: $($remoteTest.Url)" -ForegroundColor Gray
+    
+    Write-Host "Processing audio URL directly with MCP tool..." -ForegroundColor Yellow
+    Write-Host "   (This may take 30-60 seconds for transcription)" -ForegroundColor Gray
+    try {
+        # Test direct URL processing - this is the new feature
+        $result = & npx @modelcontextprotocol/inspector --cli node "$ProjectPath\dist\index.js" --method tools/call --tool-name audio-to-markdown --tool-arg filepath="$($remoteTest.Url)" 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            $jsonResponse = $result | ConvertFrom-Json -ErrorAction SilentlyContinue
+            
+            if ($jsonResponse -and $jsonResponse.content) {
+                $safeFileName = $remoteTest.Name -replace '[^\w\s-]', '' -replace '\s+', '_'
+                $outputFile = Join-Path $OutputDir "remote_audio_$safeFileName.md"
+                
+                $markdownContent = ""
+                foreach ($contentBlock in $jsonResponse.content) {
+                    if ($contentBlock.type -eq "text") {
+                        $markdownContent += $contentBlock.text + "`n"
+                    }
+                }
+                
+                $markdownContent | Out-File -FilePath $outputFile -Encoding UTF8
+                
+                Write-Host "[PASS] Successfully processed remote audio URL" -ForegroundColor Green
+                Write-Host "   Output saved to: $outputFile" -ForegroundColor Green
+                Write-Host "   Content blocks: $($jsonResponse.content.Count)" -ForegroundColor Green
+                Write-Host "   Remote URL: $($remoteTest.Url)" -ForegroundColor Green
+                
+                # Check for transcription content
+                if ($markdownContent -match "transcript|speech|spoken|audio|music" -and $markdownContent.Length -gt 200) {
+                    Write-Host "   Transcription: Detailed content extracted" -ForegroundColor Green
+                } elseif ($markdownContent.Length -gt 50) {
+                    Write-Host "   Transcription: Basic content extracted" -ForegroundColor Green
+                } else {
+                    Write-Host "   Transcription: Minimal content (may be instrumental)" -ForegroundColor Yellow
+                }
+                
+                $SuccessCount++
+            } else {
+                Write-Host "[FAIL] Invalid response format from remote audio URL" -ForegroundColor Red
+                Write-Host "   Response: $result" -ForegroundColor Red
+                $FailCount++
+            }
+        } else {
+            Write-Host "[FAIL] Remote audio URL processing failed" -ForegroundColor Red
+            Write-Host "   Error: $result" -ForegroundColor Red
+            $FailCount++
+        }
+    }
+    catch {
+        Write-Host "[FAIL] Exception during remote audio URL processing" -ForegroundColor Red
         Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
         $FailCount++
     }

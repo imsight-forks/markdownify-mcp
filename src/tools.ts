@@ -24,7 +24,7 @@ export const PDFToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the PDF file to convert",
+        description: "Absolute path of the PDF file to convert, or HTTP/HTTPS URL to a remote PDF",
       },
     },
     required: ["filepath"],
@@ -70,7 +70,7 @@ export const ImageToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the image file to convert",
+        description: "Absolute path of the image file to convert, or HTTP/HTTPS URL to a remote image",
       },
     },
     required: ["filepath"],
@@ -86,7 +86,7 @@ export const AudioToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the audio file to convert",
+        description: "Absolute path of the audio file to convert, or HTTP/HTTPS URL to a remote audio file",
       },
     },
     required: ["filepath"],
@@ -101,7 +101,7 @@ export const DocxToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the DOCX file to convert",
+        description: "Absolute path of the DOCX file to convert, or HTTP/HTTPS URL to a remote DOCX file",
       },
     },
     required: ["filepath"],
@@ -116,7 +116,7 @@ export const XlsxToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the XLSX file to convert",
+        description: "Absolute path of the XLSX file to convert, or HTTP/HTTPS URL to a remote XLSX file",
       },
     },
     required: ["filepath"],
@@ -131,7 +131,7 @@ export const PptxToMarkdownTool = ToolSchema.parse({
     properties: {
       filepath: {
         type: "string",
-        description: "Absolute path of the PPTX file to convert",
+        description: "Absolute path of the PPTX file to convert, or HTTP/HTTPS URL to a remote PPTX file",
       },
     },
     required: ["filepath"],

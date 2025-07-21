@@ -20,10 +20,17 @@ if (!(Test-Path $TestDataDir)) {
     New-Item -Path $TestDataDir -ItemType Directory -Force | Out-Null
 }
 
-# Test image files from public-files guide  
+# Test image files from Wikipedia/Wikimedia Commons and other reliable sources  
 $TestImages = @(
     @{ Name = "Random 800x600 Image"; Url = "https://picsum.photos/800/600"; FileName = "random_800x600.jpg" },
-    @{ Name = "Specific Picsum Image"; Url = "https://picsum.photos/id/237/800/600"; FileName = "picsum_237.jpg" }
+    @{ Name = "Specific Picsum Image"; Url = "https://picsum.photos/id/237/800/600"; FileName = "picsum_237.jpg" },
+    @{ Name = "Wikipedia Portrait"; Url = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Alois_Mentasti.jpg/120px-Alois_Mentasti.jpg"; FileName = "wikipedia_portrait.jpg" }
+)
+
+# Remote URL tests (new feature) - test direct image URL processing
+$RemoteImageTests = @(
+    @{ Name = "Remote Random Image"; Url = "https://picsum.photos/400/300" },
+    @{ Name = "Remote Wikipedia Image"; Url = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Alois_Mentasti.jpg/120px-Alois_Mentasti.jpg" }
 )
 
 Write-Host "=== Testing image-to-markdown MCP Tool ===" -ForegroundColor Cyan
@@ -121,6 +128,71 @@ foreach ($testCase in $TestImages) {
     }
     catch {
         Write-Host "[FAIL] Exception occurred" -ForegroundColor Red
+        Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
+        $FailCount++
+    }
+    
+    Write-Host ""
+}
+
+# Test remote URLs directly (NEW FEATURE)
+Write-Host "=== Testing Remote Image URLs (New Feature) ===" -ForegroundColor Cyan
+Write-Host "Testing direct URL processing without local file download" -ForegroundColor Gray
+Write-Host ""
+
+foreach ($remoteTest in $RemoteImageTests) {
+    Write-Host "Testing Remote Image URL: $($remoteTest.Name)" -ForegroundColor Yellow
+    Write-Host "URL: $($remoteTest.Url)" -ForegroundColor Gray
+    
+    Write-Host "Processing image URL directly with MCP tool..." -ForegroundColor Yellow
+    try {
+        # Test direct URL processing - this is the new feature
+        $result = & npx @modelcontextprotocol/inspector --cli node "$ProjectPath\dist\index.js" --method tools/call --tool-name image-to-markdown --tool-arg filepath="$($remoteTest.Url)" 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            $jsonResponse = $result | ConvertFrom-Json -ErrorAction SilentlyContinue
+            
+            if ($jsonResponse -and $jsonResponse.content) {
+                $safeFileName = $remoteTest.Name -replace '[^\w\s-]', '' -replace '\s+', '_'
+                $outputFile = Join-Path $OutputDir "remote_image_$safeFileName.md"
+                
+                $markdownContent = ""
+                foreach ($contentBlock in $jsonResponse.content) {
+                    if ($contentBlock.type -eq "text") {
+                        $markdownContent += $contentBlock.text + "`n"
+                    }
+                }
+                
+                $markdownContent | Out-File -FilePath $outputFile -Encoding UTF8
+                
+                Write-Host "[PASS] Successfully processed remote image URL" -ForegroundColor Green
+                Write-Host "   Output saved to: $outputFile" -ForegroundColor Green
+                Write-Host "   Content blocks: $($jsonResponse.content.Count)" -ForegroundColor Green
+                Write-Host "   Remote URL: $($remoteTest.Url)" -ForegroundColor Green
+                
+                # Check for image analysis content
+                if ($markdownContent -match "image|picture|photo|width|height|dimension" -and $markdownContent.Length -gt 50) {
+                    Write-Host "   Image analysis: Detailed metadata/description" -ForegroundColor Green
+                } elseif ($markdownContent.Length -gt 20) {
+                    Write-Host "   Image analysis: Basic information" -ForegroundColor Green
+                } else {
+                    Write-Host "   Image analysis: Minimal content" -ForegroundColor Yellow
+                }
+                
+                $SuccessCount++
+            } else {
+                Write-Host "[FAIL] Invalid response format from remote image URL" -ForegroundColor Red
+                Write-Host "   Response: $result" -ForegroundColor Red
+                $FailCount++
+            }
+        } else {
+            Write-Host "[FAIL] Remote image URL processing failed" -ForegroundColor Red
+            Write-Host "   Error: $result" -ForegroundColor Red
+            $FailCount++
+        }
+    }
+    catch {
+        Write-Host "[FAIL] Exception during remote image URL processing" -ForegroundColor Red
         Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
         $FailCount++
     }

@@ -25,9 +25,17 @@ if (!(Test-Path $TestDataDir)) {
     New-Item -Path $TestDataDir -ItemType Directory -Force | Out-Null
 }
 
-# Test PDF files from public-files guide
+# Test PDF files from Wikipedia/Wikimedia Commons (public-files guide)
 $TestPdfs = @(
-    @{ Name = "Simple Test PDF"; Url = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"; FileName = "simple_test.pdf" }
+    @{ Name = "Simple Test PDF"; Url = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"; FileName = "simple_test.pdf" },
+    @{ Name = "Wikipedia Upload Handbook"; Url = "https://upload.wikimedia.org/wikipedia/commons/4/49/UploadingImagesHandout.pdf"; FileName = "wikipedia_handbook.pdf" },
+    @{ Name = "Wikipedia Consent Guide"; Url = "https://upload.wikimedia.org/wikipedia/commons/9/90/Giving_Consent_for_Images_on_Wikipedia.pdf"; FileName = "consent_guide.pdf" }
+)
+
+# Remote URL tests (new feature) - test direct URL processing without local download
+$RemoteUrlTests = @(
+    @{ Name = "Remote Test PDF"; Url = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf" },
+    @{ Name = "Remote Wikipedia Handbook"; Url = "https://upload.wikimedia.org/wikipedia/commons/4/49/UploadingImagesHandout.pdf" }
 )
 
 Write-Host "=== Testing pdf-to-markdown MCP Tool ===" -ForegroundColor Cyan
@@ -129,6 +137,70 @@ foreach ($testCase in $TestPdfs) {
     }
     catch {
         Write-Host "[FAIL] Exception occurred" -ForegroundColor Red
+        Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
+        $FailCount++
+    }
+    
+    Write-Host ""
+}
+
+# Test remote URLs directly (NEW FEATURE)
+Write-Host "=== Testing Remote URLs (New Feature) ===" -ForegroundColor Cyan
+Write-Host "Testing direct URL processing without local file download" -ForegroundColor Gray
+Write-Host ""
+
+foreach ($remoteTest in $RemoteUrlTests) {
+    Write-Host "Testing Remote URL: $($remoteTest.Name)" -ForegroundColor Yellow
+    Write-Host "URL: $($remoteTest.Url)" -ForegroundColor Gray
+    
+    Write-Host "Processing PDF URL directly with MCP tool..." -ForegroundColor Yellow
+    try {
+        # Test direct URL processing - this is the new feature
+        $result = & npx @modelcontextprotocol/inspector --cli node "$ProjectPath\dist\index.js" --method tools/call --tool-name pdf-to-markdown --tool-arg filepath="$($remoteTest.Url)" 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            $jsonResponse = $result | ConvertFrom-Json -ErrorAction SilentlyContinue
+            
+            if ($jsonResponse -and $jsonResponse.content) {
+                $safeFileName = $remoteTest.Name -replace '[^\w\s-]', '' -replace '\s+', '_'
+                $outputFile = Join-Path $OutputDir "remote_pdf_$safeFileName.md"
+                
+                $markdownContent = ""
+                foreach ($contentBlock in $jsonResponse.content) {
+                    if ($contentBlock.type -eq "text") {
+                        $markdownContent += $contentBlock.text + "`n"
+                    }
+                }
+                
+                $markdownContent | Out-File -FilePath $outputFile -Encoding UTF8
+                
+                Write-Host "[PASS] Successfully processed remote PDF URL" -ForegroundColor Green
+                Write-Host "   Output saved to: $outputFile" -ForegroundColor Green
+                Write-Host "   Content blocks: $($jsonResponse.content.Count)" -ForegroundColor Green
+                Write-Host "   Remote URL: $($remoteTest.Url)" -ForegroundColor Green
+                
+                if ($markdownContent.Length -gt 100) {
+                    Write-Host "   Content extraction: Good (>100 chars)" -ForegroundColor Green
+                } elseif ($markdownContent.Length -gt 10) {
+                    Write-Host "   Content extraction: Limited (10-100 chars)" -ForegroundColor Yellow
+                } else {
+                    Write-Host "   Content extraction: Minimal (<10 chars)" -ForegroundColor Yellow
+                }
+                
+                $SuccessCount++
+            } else {
+                Write-Host "[FAIL] Invalid response format from remote URL" -ForegroundColor Red
+                Write-Host "   Response: $result" -ForegroundColor Red
+                $FailCount++
+            }
+        } else {
+            Write-Host "[FAIL] Remote URL processing failed" -ForegroundColor Red
+            Write-Host "   Error: $result" -ForegroundColor Red
+            $FailCount++
+        }
+    }
+    catch {
+        Write-Host "[FAIL] Exception during remote URL processing" -ForegroundColor Red
         Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
         $FailCount++
     }
