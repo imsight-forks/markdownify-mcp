@@ -24,31 +24,28 @@ export class Markdownify {
     projectRoot: string,
     uvPath: string,
   ): Promise<string> {
-    const venvPath = upath.join(projectRoot, ".venv");
-    const markitdownPath = upath.join(
-      venvPath, 
-      process.platform === 'win32' ? 'Scripts' : 'bin', 
-      `markitdown${process.platform === 'win32' ? '.exe' : ''}`
-    );
-
-    if (!fs.existsSync(markitdownPath)) {
-      throw new Error("markitdown executable not found");
-    }
-
     // Expand home directory and normalize paths using upath for consistency
     const expandedUvPath = this.expandHome(uvPath);
     const normalizedUvPath = upath.normalize(expandedUvPath);
-    const normalizedMarkitdownPath = upath.normalize(markitdownPath);
+    const normalizedProjectRoot = upath.normalize(projectRoot);
     const normalizedFilePath = upath.normalize(filePath);
     
     // Properly quote paths for Windows (upath handles path separators consistently)
     const quotedUvPath = normalizedUvPath.includes(' ') ? `"${normalizedUvPath}"` : normalizedUvPath;
-    const quotedMarkitdownPath = normalizedMarkitdownPath.includes(' ') ? `"${normalizedMarkitdownPath}"` : normalizedMarkitdownPath;
+    const quotedProjectRoot = normalizedProjectRoot.includes(' ') ? `"${normalizedProjectRoot}"` : normalizedProjectRoot;
     const quotedFilePath = normalizedFilePath.includes(' ') ? `"${normalizedFilePath}"` : normalizedFilePath;
     
-    const command = `${quotedUvPath} run ${quotedMarkitdownPath} ${quotedFilePath}`;
+    // Use 'uv run --project' which properly sets up the virtual environment
+    const command = `${quotedUvPath} run --project ${quotedProjectRoot} markitdown ${quotedFilePath}`;
     
-    const { stdout, stderr } = await execAsync(command);
+    // Set up environment for proper encoding on Windows
+    const env = { 
+      ...process.env,
+      // Force UTF-8 encoding on Windows to avoid Unicode issues
+      ...(process.platform === 'win32' ? { PYTHONIOENCODING: 'utf-8' } : {})
+    };
+    
+    const { stdout, stderr } = await execAsync(command, { env });
 
     if (stderr) {
       throw new Error(`Error executing command: ${stderr}`);

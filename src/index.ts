@@ -5,8 +5,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 async function main() {
   process.env.PYTHONUTF8 = '1';
+  process.env.PYTHONIOENCODING = 'utf-8';
+  
   const transport = new StdioServerTransport();
-  const server = createServer();
+  const server = await createServer();
   await server.connect(transport);
 }
 
