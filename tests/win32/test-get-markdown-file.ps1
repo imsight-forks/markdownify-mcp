@@ -239,17 +239,22 @@ $nonExistentFile = Join-Path $TestDataDir "non-existent-file.md"
 try {
     $result = & npx @modelcontextprotocol/inspector --cli node "$ProjectPath\dist\index.js" --method tools/call --tool-name get-markdown-file --tool-arg filepath="$nonExistentFile" 2>&1
     
-    if ($LASTEXITCODE -ne 0) {
+    # Parse JSON response to check for error
+    $jsonResponse = $result | ConvertFrom-Json -ErrorAction SilentlyContinue
+    
+    if ($jsonResponse -and $jsonResponse.isError -eq $true) {
         Write-Host "[PASS] Properly handles non-existent file" -ForegroundColor Green
-        Write-Host "   Expected error occurred" -ForegroundColor Green
+        Write-Host "   Error detected: $($jsonResponse.content[0].text)" -ForegroundColor Green
         $SuccessCount++
     } else {
-        Write-Host "[FAIL] Should have failed with non-existent file" -ForegroundColor Red
+        Write-Host "[FAIL] Should have returned error for non-existent file" -ForegroundColor Red
+        Write-Host "   Response: $result" -ForegroundColor Red
         $FailCount++
     }
 } catch {
-    Write-Host "[PASS] Exception properly caught for non-existent file" -ForegroundColor Green
-    $SuccessCount++
+    Write-Host "[FAIL] Exception occurred during error handling test" -ForegroundColor Red
+    Write-Host "   Exception: $($_.Exception.Message)" -ForegroundColor Red
+    $FailCount++
 }
 
 Write-Host ""
