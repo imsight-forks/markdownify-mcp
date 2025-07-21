@@ -10,52 +10,49 @@ const execAsync = promisify(exec);
 const paths = envPaths('markdownify-mcp');
 
 export default class UVX {
-  uvxPath: string;
+  uvPath: string;
 
-  constructor(uvxPath: string) {
-    this.uvxPath = uvxPath;
+  constructor(uvPath: string) {
+    this.uvPath = uvPath;
   }
 
   get path() {
-    return this.uvxPath;
+    return this.uvPath;
   }
 
   static async setup() {
-    // Try to find uvx using proper platform-specific paths
+    // Try to find uv using proper platform-specific paths
     const possiblePaths: string[] = [];
     const homeDir = os.homedir();
-    const uvxExecutable = process.platform === 'win32' ? 'uvx.exe' : 'uvx';
+    const uvExecutable = process.platform === 'win32' ? 'uv.exe' : 'uv';
     
-    // Standard user installation locations using env-paths for cross-platform directories
+    // Standard user installation locations
     if (process.platform === 'win32') {
       // Windows-specific locations
       possiblePaths.push(
-        path.join(homeDir, '.local', 'bin', uvxExecutable),
-        path.join(paths.data, 'bin', uvxExecutable), // Application data directory
-        path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Python', 'Scripts', uvxExecutable),
-        path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'Programs', 'Python', 'Scripts', uvxExecutable)
+        path.join(homeDir, '.local', 'bin', uvExecutable),
+        path.join(paths.data, 'bin', uvExecutable),
+        path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Python', 'Scripts', uvExecutable),
+        path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'Programs', 'Python', 'Scripts', uvExecutable)
       );
     } else {
       // Unix-like systems (Linux, macOS)
       possiblePaths.push(
-        path.join(homeDir, '.local', 'bin', uvxExecutable),
-        path.join(paths.data, 'bin', uvxExecutable), // Application data directory
-        upath.join('/usr/local/bin', uvxExecutable),
-        upath.join('/usr/bin', uvxExecutable),
-        upath.join('/opt/homebrew/bin', uvxExecutable) // Homebrew on Apple Silicon
+        path.join(homeDir, '.local', 'bin', uvExecutable),
+        path.join(paths.data, 'bin', uvExecutable),
+        upath.join('/usr/local/bin', uvExecutable),
+        upath.join('/usr/bin', uvExecutable),
+        upath.join('/opt/homebrew/bin', uvExecutable) // Homebrew on Apple Silicon
       );
     }
-    
-    // Add system PATH as last resort
-    possiblePaths.push(uvxExecutable);
 
-    // First try using 'uvx' from PATH
+    // First try using 'uv' from PATH
     try {
-      const whichCommand = process.platform === 'win32' ? `where ${uvxExecutable}` : `which ${uvxExecutable}`;
-      const { stdout: uvxPath, stderr } = await execAsync(whichCommand);
+      const whichCommand = process.platform === 'win32' ? `where ${uvExecutable}` : `which ${uvExecutable}`;
+      const { stdout: uvPath, stderr } = await execAsync(whichCommand);
       
-      if (!stderr && uvxPath.trim()) {
-        const foundPath = uvxPath.trim().split('\n')[0];
+      if (!stderr && uvPath.trim()) {
+        const foundPath = uvPath.trim().split('\n')[0];
         return new UVX(upath.normalize(foundPath));
       }
     } catch {
@@ -74,19 +71,43 @@ export default class UVX {
       }
     }
 
+    // Provide helpful error message with installation instructions
+    const installInstructions = process.platform === 'win32' 
+      ? 'Windows (PowerShell):\n  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"'
+      : 'Linux/Mac:\n  curl -LsSf https://astral.sh/uv/install.sh | sh';
+    
     throw new Error(
-      "uvx not found. Please ensure uv is installed and uvx is in your PATH, or set UV_PATH environment variable.",
+      `uv package manager not found!\n\n` +
+      `Please install uv first:\n${installInstructions}\n\n` +
+      `After installation, run:\n` +
+      `  uv sync  (to install Python dependencies)\n` +
+      `  uv run --project . markitdown --help  (to verify)\n\n` +
+      `For more info: https://docs.astral.sh/uv/getting-started/installation/`
     );
   }
 
-  async installDeps() {
-    // This is a hack to make sure that markitdown is installed before it's called in the OCRProcessor
+  // Remove automatic dependency installation - let users handle this themselves
+  async checkDeps(projectRoot: string): Promise<boolean> {
     try {
-      const normalizedPath = upath.normalize(this.uvxPath);
+      const normalizedPath = upath.normalize(this.uvPath);
       const quotedPath = normalizedPath.includes(' ') ? `"${normalizedPath}"` : normalizedPath;
-      await execAsync(`${quotedPath} markitdown example.pdf`);
-    } catch {
-      console.log("UVX markitdown should be ready now");
+      const quotedProjectRoot = projectRoot.includes(' ') ? `"${projectRoot}"` : projectRoot;
+      
+      // Test if markitdown is available without trying to install
+      await execAsync(`${quotedPath} run --project ${quotedProjectRoot} markitdown --help`);
+      return true;
+    } catch (error: any) {
+      const errorMessage = error.message || error.toString();
+      if (errorMessage.includes('ModuleNotFoundError')) {
+        throw new Error(
+          `Python dependencies not found!\n\n` +
+          `Please run the following commands:\n` +
+          `  cd ${projectRoot}\n` +
+          `  uv sync\n\n` +
+          `This will install the required Python packages including markitdown.`
+        );
+      }
+      throw error;
     }
   }
 }

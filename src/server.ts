@@ -5,10 +5,16 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Markdownify } from "./Markdownify.js";
+import UVX from "./UVX.js";
 import * as tools from "./tools.js";
 import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import is_ip_private from "private-ip";
 import { URL } from "node:url";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const RequestPayloadSchema = z.object({
   filepath: z.string().optional(),
@@ -17,7 +23,7 @@ const RequestPayloadSchema = z.object({
   uvPath: z.string().optional(),
 });
 
-export function createServer() {
+export async function createServer() {
   const server = new Server(
     {
       name: "mcp-markdownify-server",
@@ -29,6 +35,23 @@ export function createServer() {
       },
     },
   );
+
+  // Initialize UV at startup and check dependencies
+  let uvx: UVX | null = null;
+  let initializationError: string | null = null;
+
+  try {
+    uvx = await UVX.setup();
+    // Check if Python dependencies are available
+    const projectRoot = path.resolve(__dirname, "..");
+    await uvx.checkDeps(projectRoot);
+    console.log("✅ MCP Markdownify Server initialized successfully");
+  } catch (error: any) {
+    initializationError = error.message;
+    console.warn("⚠️  MCP Markdownify Server initialization warning:");
+    console.warn(error.message);
+    console.warn("The server will still start, but tools may not work until dependencies are installed.");
+  }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -44,6 +67,11 @@ export function createServer() {
       const validatedArgs = RequestPayloadSchema.parse(args);
 
       try {
+        // Check if we have initialization errors and tools need UV
+        if (initializationError && name !== tools.GetMarkdownFileTool.name) {
+          throw new Error(initializationError);
+        }
+
         let result;
         switch (name) {
           case tools.YouTubeToMarkdownTool.name:
@@ -64,8 +92,8 @@ export function createServer() {
     
             result = await Markdownify.toMarkdown({
               url: validatedArgs.url,
-              projectRoot: validatedArgs.projectRoot,
-              uvPath: validatedArgs.uvPath || process.env.UV_PATH,
+              projectRoot: validatedArgs.projectRoot || path.resolve(__dirname, ".."),
+              uvPath: validatedArgs.uvPath || uvx?.path || process.env.UV_PATH,
             });
             break;
 
@@ -80,8 +108,8 @@ export function createServer() {
             }
             result = await Markdownify.toMarkdown({
               filePath: validatedArgs.filepath,
-              projectRoot: validatedArgs.projectRoot,
-              uvPath: validatedArgs.uvPath || process.env.UV_PATH,
+              projectRoot: validatedArgs.projectRoot || path.resolve(__dirname, ".."),
+              uvPath: validatedArgs.uvPath || uvx?.path || process.env.UV_PATH,
             });
             break;
 
