@@ -1,0 +1,30 @@
+﻿[
+    {
+        "Passed":  true,
+        "Message":  "Required build files exist",
+        "Timestamp":  "2025-07-21 13:28:43",
+        "Details":  "dist/index.js and dist/server.js found",
+        "TestName":  "Build Status"
+    },
+    {
+        "Passed":  true,
+        "Message":  "Server responds to tools/list request",
+        "Timestamp":  "2025-07-21 13:28:45",
+        "Details":  "Found 10 tools",
+        "TestName":  "Server Connection"
+    },
+    {
+        "Passed":  true,
+        "Message":  "All expected tools present",
+        "Timestamp":  "2025-07-21 13:28:48",
+        "Details":  "Found: audio-to-markdown, bing-search-to-markdown, docx-to-markdown, get-markdown-file, image-to-markdown, pdf-to-markdown, pptx-to-markdown, webpage-to-markdown, xlsx-to-markdown, youtube-to-markdown",
+        "TestName":  "Tools Listing"
+    },
+    {
+        "Passed":  true,
+        "Message":  "Successfully converted webpage to markdown",
+        "Timestamp":  "2025-07-21 13:28:52",
+        "Details":  "Content blocks: 3",
+        "TestName":  "Simple Webpage Conversion"
+    }
+]
